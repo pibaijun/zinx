@@ -3,6 +3,7 @@ package znet
 import (
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 
 	"github.com/aceld/zinx/ziface"
@@ -12,7 +13,7 @@ import (
 type ConnManager struct {
 	connections atomic.Value
 }
-
+var mutex sync.Mutex // 对连接管理器加锁,否则会崩溃,pbj
 //NewConnManager 创建一个链接管理
 func NewConnManager() *ConnManager {
 	var cm = &ConnManager{}
@@ -26,8 +27,10 @@ func (connMgr *ConnManager) Add(conn ziface.IConnection) {
 	connections:=connMgr.connections.Load().(map[uint32]ziface.IConnection)
 
 	//将conn连接添加到ConnMananger中
+	mutex.Lock()
 	connections[conn.GetConnID()] = conn
 	connMgr.connections.Store(connections)
+	mutex.Unlock()
 
 	fmt.Println("connection add to ConnManager successfully: conn num = ", connMgr.Len())
 }
@@ -36,8 +39,10 @@ func (connMgr *ConnManager) Add(conn ziface.IConnection) {
 func (connMgr *ConnManager) Remove(conn ziface.IConnection) {
 	connections:=connMgr.connections.Load().(map[uint32]ziface.IConnection)
 	//删除连接信息
+	mutex.Lock()
 	delete(connections, conn.GetConnID())
 	connMgr.connections.Store(connections)
+	mutex.Unlock()
 	fmt.Println("connection Remove ConnID=", conn.GetConnID(), " successfully: conn num = ", connMgr.Len())
 }
 
@@ -64,6 +69,7 @@ func (connMgr *ConnManager) ClearConn() {
 	connections:=connMgr.connections.Load().(map[uint32]ziface.IConnection)
 
 	//停止并删除全部的连接信息
+	mutex.Lock()
 	for connID, conn := range connections {
 		//停止
 		conn.Stop()
@@ -71,6 +77,7 @@ func (connMgr *ConnManager) ClearConn() {
 		delete(connections, connID)
 	}
 	connMgr.connections.Store(connections)
+	mutex.Unlock()
 	fmt.Println("Clear All Connections successfully: conn num = ", connMgr.Len())
 }
 
@@ -82,8 +89,10 @@ func (connMgr *ConnManager) ClearOneConn(connID uint32) {
 		//停止
 		conn.Stop()
 		//删除
+		mutex.Lock()
 		delete(connections, connID)
 		connMgr.connections.Store(connections)
+		mutex.Unlock()
 		fmt.Println("Clear Connections ID:  ", connID, "succeed")
 		return
 	}
